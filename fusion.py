@@ -2,6 +2,7 @@ import os
 import mne
 import numpy as np
 import pandas as pd
+import math
 
 import argparse
 
@@ -161,7 +162,9 @@ def plot_and_save(cm, labels, title, fname):
 
 # 超参数（直接从 config 里取）
 MAX_CHANNELS = 63 + 88
-top_k = min(int(config["top_k"]), MAX_CHANNELS)  # Fusion 最多 151 通道
+MIN_TOP_K = math.ceil(MAX_CHANNELS * 0.1)
+TOP_K_STEP = 2
+top_k = MAX_CHANNELS
 window_size_samples = config["window_size_samples"]
 window_stride_samples = config["window_stride_samples"]
 batch_size = args.batch_size if args.batch_size is not None else config["batch_size"]
@@ -169,10 +172,9 @@ n_epochs = args.epochs if args.epochs is not None else config["n_epochs"]
 lr = config["lr"]
 weight_decay = int(config["weight_decay"])
 seed = config["seed"]
-t = top_k
 # ------------------ 主循环 ------------------
 
-while top_k > t/2:
+while top_k >= MIN_TOP_K:
     global_results = []  # 列表，后面会 append dicts: {'subject':..., 'top_k':..., 'test_acc':..., ...}
     # ------------------ 输出重定向（安全） ------------------
     now_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -192,6 +194,8 @@ while top_k > t/2:
     print(f"批大小: {batch_size}")
     print(f"训练轮数: {n_epochs}")
     print(f"模态最大通道数: {MAX_CHANNELS}")
+    print(f"最小搜索通道数: {MIN_TOP_K}")
+    print(f"通道搜索步长: {TOP_K_STEP}")
 
     save_dir = "ResFusion"
     os.makedirs(save_dir, exist_ok=True)
@@ -426,4 +430,4 @@ while top_k > t/2:
     summary_csv = os.path.join(save_dir, f"summary_{top_k}_results.csv")
     summary_df.to_csv(summary_csv, index=False)
     print("Saved summary CSV:", summary_csv)
-    top_k = top_k - 10
+    top_k = top_k - TOP_K_STEP
