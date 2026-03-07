@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local cache and logs
+.cache/
+.mplconfig/
+Logs/
+*.log
+train.txt
+history.json
+
+# Large data directories
+FusionEEG-fNIRS/
+PPEEG/
+PPfNIRS/
+
+# Training outputs and generated artifacts
+ResEEG/
+ResFusion/
+ResfNIRS/
+*.pt
+*.csv
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.fif
+
+# Timestamped experiment notes and reports
+20*.txt
+20*.md
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/
