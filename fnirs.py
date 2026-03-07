@@ -75,7 +75,8 @@ filesA1 = sorted(filesA1)
 # out_filename = f'{now_time}_trainfnirs.txt'
 
 # 超参数（直接从 config 里取）
-top_k = config["top_k"]                         # 想要保留的通道数
+MAX_CHANNELS = 88
+top_k = min(int(config["top_k"]), MAX_CHANNELS)  # fNIRS 最多 88 通道
 window_size_samples = config["window_size_samples"]
 window_stride_samples = config["window_stride_samples"]
 batch_size = config["batch_size"]
@@ -165,6 +166,7 @@ while top_k > t/3:
     print(f"权重衰减: {weight_decay}")
     print(f"批大小: {batch_size}")
     print(f"训练轮数: {n_epochs}")
+    print(f"模态最大通道数: {MAX_CHANNELS}")
 
     try:
         print("Files to process:", filesA1)
@@ -429,4 +431,3 @@ while top_k > t/3:
     summary_df.to_csv(summary_csv, index=False)
     print("Saved summary CSV:", summary_csv)
     top_k = top_k - 10
-

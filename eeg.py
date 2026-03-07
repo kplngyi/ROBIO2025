@@ -62,6 +62,20 @@ import yaml
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
+
+class Tee:
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+            stream.flush()
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+
 # # ------------------ 输出重定向（可选） ------------------
 # now_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 # sys.stdout = open(f'{now_time}_traineeg.md', 'w')
@@ -115,7 +129,8 @@ ext_dur = 5
 # n_epochs = 100         # 训练轮数稍多，让学习率退火充分发挥作用
 
 # 超参数（直接从 config 里取）
-top_k = config["top_k"]                         # 想要保留的通道数
+MAX_CHANNELS = 63
+top_k = min(int(config["top_k"]), MAX_CHANNELS)  # EEG 最多 63 通道
 window_size_samples = config["window_size_samples"]
 window_stride_samples = config["window_stride_samples"]
 batch_size = args.batch_size if args.batch_size is not None else config["batch_size"]
@@ -137,7 +152,7 @@ while top_k > t/3:
     out_fname = os.path.join(log_dir, f'{now_time}_{top_k}_{n_epochs}_{lr}_traineeg.log')
     orig_stdout = sys.stdout
     f_out = open(out_fname, 'w')
-    sys.stdout = f_out
+    sys.stdout = Tee(orig_stdout, f_out)
     # 打印超参数
     print("\n📌 Training Hyperparameters:")
     print(f"保留的通道数: {top_k}")
@@ -147,6 +162,7 @@ while top_k > t/3:
     print(f"权重衰减: {weight_decay}")
     print(f"批大小: {batch_size}")
     print(f"训练轮数: {n_epochs}")
+    print(f"模态最大通道数: {MAX_CHANNELS}")
     try:
         print("Files to process:", filesA1)
         if len(filesA1) == 0:
