@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--data_dir', type=str, default='FusionEEG-fNIRS')
+parser.add_argument('--device', type=str, default='cuda')
 args = parse_known_args(add_common_runtime_args(parser))
 
 
@@ -50,7 +51,6 @@ print(f"共 {int(len(matched_keys)/2)} 个被试")
 import os
 import sys
 import datetime
-import traceback
 import gc
 
 import numpy as np
@@ -70,7 +70,6 @@ from braindecode.util import set_random_seeds
 
 from skorch.callbacks import LRScheduler
 from skorch.helper import predefined_split
-from skorch.dataset import Dataset as SkorchDataset
 
 from sklearn.model_selection import train_test_split
 from sklearn.utils import compute_class_weight
@@ -95,6 +94,33 @@ class Tee:
     def flush(self):
         for stream in self.streams:
             stream.flush()
+
+
+def resolve_training_device(device_arg):
+    requested = (device_arg or "auto").strip().lower()
+    cuda_available = torch.cuda.is_available()
+    if requested == "auto":
+        return torch.device("cuda" if cuda_available else "cpu")
+    if requested == "cpu":
+        return torch.device("cpu")
+    if requested == "cuda":
+        if not cuda_available:
+            raise RuntimeError("Requested --device cuda but CUDA is not available.")
+        return torch.device("cuda")
+    if requested.startswith("cuda:"):
+        if not cuda_available:
+            raise RuntimeError(f"Requested --device {requested} but CUDA is not available.")
+        try:
+            gpu_index = int(requested.split(":", 1)[1])
+        except ValueError as exc:
+            raise ValueError(f"Invalid --device value: {device_arg}") from exc
+        gpu_count = torch.cuda.device_count()
+        if gpu_index < 0 or gpu_index >= gpu_count:
+            raise RuntimeError(
+                f"Requested --device {requested}, but only {gpu_count} CUDA device(s) are available."
+            )
+        return torch.device(requested)
+    raise ValueError("Invalid --device. Use one of: auto, cpu, cuda, cuda:N")
 
 # ------------------ 用户可能需要先定义的外部变量（请确保在运行前已定义） ------------------
 # 例如：
@@ -182,7 +208,7 @@ window_stride_samples = config["window_stride_samples"]
 batch_size = args.batch_size if args.batch_size is not None else config["batch_size"]
 n_epochs = args.epochs if args.epochs is not None else config["n_epochs"]
 lr = config["lr"]
-weight_decay = int(config["weight_decay"])
+weight_decay = config["weight_decay"]
 seed = config["seed"]
 # ------------------ 主循环 ------------------
 
@@ -318,11 +344,17 @@ while top_k >= MIN_TOP_K:
                 y_test  = y_test.astype(np.int64)
 
                 # ------------------ 随机种子与设备 ------------------
-                cuda = torch.cuda.is_available()
-                device = "cuda" if cuda else "cpu"
-                if cuda:
-                    torch.backends.cudnn.benchmark = False
-                set_random_seeds(seed=seed, cuda=cuda)
+                train_device = resolve_training_device(args.device)
+                use_cuda = train_device.type == "cuda"
+                if use_cuda:
+                    torch.backends.cudnn.benchmark = True
+                set_random_seeds(seed=seed, cuda=use_cuda)
+                print(f"Requested device: {args.device}")
+                print(f"Resolved device: {train_device}")
+                print(f"CUDA available: {torch.cuda.is_available()}")
+                if use_cuda:
+                    print(f"CUDA device count: {torch.cuda.device_count()}")
+                    print(f"Using GPU: {torch.cuda.get_device_name(train_device)}")
 
                 # ------------------ 构建模型 ------------------
                 n_channels = X_train.shape[1]
@@ -337,23 +369,18 @@ while top_k >= MIN_TOP_K:
                     final_conv_length="auto",
                 )
                 print(model)
-                if cuda:
-                    model.cuda()
 
                 # ------------------ 损失函数与 class weights ------------------
                 class_weights = compute_class_weight('balanced', classes=classes, y=y_train)
-                class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
+                class_weights = torch.tensor(class_weights, dtype=torch.float32).to(train_device)
                 criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
-
-                # ------------------ Skorch Dataset for valid ------------------
-                valid_ds = SkorchDataset(X_valid, y_valid)
 
                 # ------------------ 构建 EEGClassifier ------------------
                 clf = EEGClassifier(
                     model,
                     criterion=criterion,
                     optimizer=torch.optim.AdamW,
-                    train_split=predefined_split(valid_ds),
+                    train_split=predefined_split(valid_set),
                     optimizer__lr=lr,
                     optimizer__weight_decay=weight_decay,
                     batch_size=batch_size,
@@ -361,7 +388,7 @@ while top_k >= MIN_TOP_K:
                         "accuracy",
                         ("lr_scheduler", LRScheduler("CosineAnnealingLR", T_max=max(1, n_epochs - 1))),
                     ],
-                    device=device,
+                    device=str(train_device),
                     classes=classes,
                     max_epochs=n_epochs,
                 )
@@ -419,7 +446,6 @@ while top_k >= MIN_TOP_K:
 
             except Exception as e:
                 print(f"Error processing key {key}: {e}")
-                traceback.print_exc()
                 # 尝试释放并继续下一个文件/键
                 try:
                     if 'model' in locals():

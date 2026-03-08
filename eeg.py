@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--data_dir', type=str, default='PPEEG')
-parser.add_argument('--device', type=str, default='auto')
+parser.add_argument('--device', type=str, default='cuda')
 args = parse_known_args(add_common_runtime_args(parser))
 
 # 切换到项目根目录，兼容本地脚本和 Colab 工作目录
@@ -70,7 +70,7 @@ from skorch.helper import predefined_split
 
 
 # 超参数
-# from config import config
+from config import config
 import yaml
 # 读取配置文件
 with open(resolve_path(args.config_path, project_root), "r") as f:
@@ -117,9 +117,6 @@ def resolve_training_device(device_arg):
         return torch.device(requested)
     raise ValueError("Invalid --device. Use one of: auto, cpu, cuda, cuda:N")
 
-# # ------------------ 输出重定向（可选） ------------------
-# now_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-# sys.stdout = open(f'{now_time}_traineeg.md', 'w')
 
 
 # ------------------ 通道选择（Fisher score） ------------------
