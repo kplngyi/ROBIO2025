@@ -5,21 +5,31 @@ import pandas as pd
 import math
 
 import argparse
+from runtime_utils import (
+    add_common_runtime_args,
+    parse_known_args,
+    prepare_runtime_dirs,
+    resolve_path,
+    resolve_project_root,
+)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
-args = parser.parse_args()
+parser.add_argument('--data_dir', type=str, default='FusionEEG-fNIRS')
+args = parse_known_args(add_common_runtime_args(parser))
 
 
-# 切换到脚本所在目录，避免依赖历史环境中的绝对路径
+# 切换到项目根目录，兼容本地脚本和 Colab 工作目录
 cwd = os.getcwd()
+project_root = resolve_project_root(__file__, args.project_root)
+runtime_dirs = prepare_runtime_dirs(project_root, args.output_root)
 print("当前工作目录是：", cwd)
-target_dir = os.path.dirname(os.path.abspath(__file__))
-os.chdir(target_dir)
+print("项目根目录是：", project_root)
+os.chdir(project_root)
 
 # 路径设置
-fusion_dir = "FusionEEG-fNIRS"
+fusion_dir = resolve_path(args.data_dir, project_root)
 
 # 获取所有 EEG 和 fNIRS 文件名
 fusion_files = os.listdir(fusion_dir)
@@ -69,7 +79,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 # 超参数
 import yaml
 # 读取配置文件
-with open("config.yaml", "r") as f:
+with open(resolve_path(args.config_path, project_root), "r") as f:
     config = yaml.safe_load(f)
 
 
@@ -163,7 +173,9 @@ def plot_and_save(cm, labels, title, fname):
 # 超参数（直接从 config 里取）
 MAX_CHANNELS = 63 + 88
 MIN_TOP_K = math.ceil(MAX_CHANNELS * 0.1)
-TOP_K_STEP = 2
+if args.min_top_k is not None:
+    MIN_TOP_K = args.min_top_k
+TOP_K_STEP = args.top_k_step
 top_k = MAX_CHANNELS
 window_size_samples = config["window_size_samples"]
 window_stride_samples = config["window_stride_samples"]
@@ -178,7 +190,7 @@ while top_k >= MIN_TOP_K:
     global_results = []  # 列表，后面会 append dicts: {'subject':..., 'top_k':..., 'test_acc':..., ...}
     # ------------------ 输出重定向（安全） ------------------
     now_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    log_dir = "Logs"
+    log_dir = runtime_dirs["logs_dir"]
     os.makedirs(log_dir, exist_ok=True)
     out_fname = os.path.join(log_dir, f'{now_time}_{top_k}_{n_epochs}_{lr}_trainfusion.log')
     orig_stdout = sys.stdout
@@ -197,7 +209,7 @@ while top_k >= MIN_TOP_K:
     print(f"最小搜索通道数: {MIN_TOP_K}")
     print(f"通道搜索步长: {TOP_K_STEP}")
 
-    save_dir = "ResFusion"
+    save_dir = runtime_dirs["output_dir"] / "ResFusion"
     os.makedirs(save_dir, exist_ok=True)
 
 
