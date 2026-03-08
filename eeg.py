@@ -14,8 +14,8 @@ from runtime_utils import (
 )
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=64)
-parser.add_argument('--epochs', type=int, default=30)
+parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--epochs', type=int, default=300)
 parser.add_argument('--data_dir', type=str, default='PPEEG')
 parser.add_argument('--device', type=str, default='cuda')
 args = parse_known_args(add_common_runtime_args(parser))
@@ -57,7 +57,7 @@ import torch
 import mne
 
 from sklearn.utils import compute_class_weight
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, f1_score
 from sklearn.model_selection import train_test_split
 
 from braindecode.datasets import create_from_mne_raw
@@ -67,6 +67,7 @@ from braindecode.util import set_random_seeds
 
 from skorch.callbacks import LRScheduler
 from skorch.helper import predefined_split
+from skorch.callbacks import Callback
 
 
 # 超参数
@@ -75,6 +76,9 @@ import yaml
 # 读取配置文件
 with open(resolve_path(args.config_path, project_root), "r") as f:
     config = yaml.safe_load(f)
+
+# Keep MNE informational chatter out of training logs.
+mne.set_log_level("WARNING")
 
 
 class Tee:
@@ -89,6 +93,37 @@ class Tee:
     def flush(self):
         for stream in self.streams:
             stream.flush()
+
+
+class PerClassF1Callback(Callback):
+    """Compute and print per-class F1 on validation data every epoch."""
+
+    def on_epoch_end(self, net, dataset_train=None, dataset_valid=None, **kwargs):
+        if dataset_valid is None:
+            return
+
+        x_valid = []
+        y_true = []
+        for i in range(len(dataset_valid)):
+            item = dataset_valid[i]
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                x_valid.append(np.array(item[0]))
+                y_true.append(int(item[1]))
+
+        if not x_valid or not y_true:
+            return
+
+        x_valid = np.stack(x_valid)
+        y_pred = net.predict(x_valid)
+        labels = net.classes_
+        f1_vals = np.atleast_1d(f1_score(y_true, y_pred, labels=labels, average=None, zero_division=0))
+
+        f1_text = []
+        for cls, f1_val in zip(labels, f1_vals):
+            key = f"valid_f1_class_{int(cls)}"
+            net.history.record(key, float(f1_val))
+            f1_text.append(f"class_{int(cls)}={f1_val:.4f}")
+        print("valid_f1_per_class:", ", ".join(f1_text))
 
 
 def resolve_training_device(device_arg):
@@ -384,6 +419,7 @@ while top_k >= MIN_TOP_K:
                 callbacks=[
                     "accuracy",
                     ("lr_scheduler", LRScheduler("CosineAnnealingLR", T_max=max(1, n_epochs - 1))),
+                    ("per_class_f1", PerClassF1Callback()),
                 ],
                 device=str(train_device),
                 classes=classes,

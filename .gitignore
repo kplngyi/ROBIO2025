@@ -8,6 +8,9 @@ __pycache__/
 *.py[cod]
 .venv/
 
+# Local editor settings
+.vscode/
+
 # Local cache and logs
 .cache/
 .mplconfig/

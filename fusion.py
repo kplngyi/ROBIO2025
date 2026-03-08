@@ -81,6 +81,9 @@ import yaml
 with open(resolve_path(args.config_path, project_root), "r") as f:
     config = yaml.safe_load(f)
 
+# Keep MNE informational chatter out of training logs.
+mne.set_log_level("WARNING")
+
 
 class Tee:
     def __init__(self, *streams):

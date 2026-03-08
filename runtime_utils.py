@@ -48,7 +48,7 @@ def add_common_runtime_args(parser):
     parser.add_argument("--project_root", type=str, default=None)
     parser.add_argument("--output_root", type=str, default=None)
     parser.add_argument("--config_path", type=str, default="config.yaml")
-    parser.add_argument("--top_k_step", type=int, default=2)
+    parser.add_argument("--top_k_step", type=int, default=5)
     parser.add_argument("--min_top_k", type=int, default=None)
     parser.add_argument("--files_limit", type=int, default=None)
     return parser
