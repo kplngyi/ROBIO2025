@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--data_dir', type=str, default='FusionEEG-fNIRS')
+parser.add_argument('--model', type=str, default='shallow', choices=['shallow', 'temporal_se'])
 args = parse_known_args(add_common_runtime_args(parser))
 
 
@@ -64,9 +65,9 @@ import matplotlib.pyplot as plt
 
 import torch
 from braindecode.datasets import create_from_mne_raw
-from braindecode.models import ShallowFBCSPNet
 from braindecode import EEGClassifier
 from braindecode.util import set_random_seeds
+from model_factory import build_model
 
 from skorch.callbacks import LRScheduler
 from skorch.helper import predefined_split
@@ -330,12 +331,13 @@ while top_k >= MIN_TOP_K:
                 classes = np.unique(y_train)
                 n_classes = len(classes)
 
-                model = ShallowFBCSPNet(
-                    n_channels,
-                    n_classes,
+                model = build_model(
+                    model_name=args.model,
+                    n_channels=n_channels,
+                    n_classes=n_classes,
                     n_times=input_window_samples,
-                    final_conv_length="auto",
                 )
+                print(f"Model: {args.model}")
                 print(model)
                 if cuda:
                     model.cuda()

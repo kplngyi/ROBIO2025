@@ -18,6 +18,7 @@ parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--data_dir', type=str, default='PPEEG')
 parser.add_argument('--device', type=str, default='auto')
+parser.add_argument('--model', type=str, default='shallow', choices=['shallow', 'temporal_se'])
 args = parse_known_args(add_common_runtime_args(parser))
 
 # 切换到项目根目录，兼容本地脚本和 Colab 工作目录
@@ -61,9 +62,9 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import train_test_split
 
 from braindecode.datasets import create_from_mne_raw
-from braindecode.models import ShallowFBCSPNet
 from braindecode import EEGClassifier
 from braindecode.util import set_random_seeds
+from model_factory import build_model
 
 from skorch.callbacks import LRScheduler
 from skorch.helper import predefined_split
@@ -362,12 +363,13 @@ while top_k >= MIN_TOP_K:
             classes = np.unique(y_train)
             n_classes = len(classes)
 
-            model = ShallowFBCSPNet(
-                n_channels,
-                n_classes,
+            model = build_model(
+                model_name=args.model,
+                n_channels=n_channels,
+                n_classes=n_classes,
                 n_times=input_window_samples,
-                final_conv_length="auto",
             )
+            print(f"Model: {args.model}")
             print(model)
 
             # ------------------ 损失函数：根据训练集计算 class weights ------------------
