@@ -2,6 +2,8 @@
 .DS_Store
 .rclone.conf
 *.tar.gz
+id_ed25519
+id_ed25519.pub
 
 # Python cache and virtual environments
 __pycache__/
@@ -39,6 +41,10 @@ ResfNIRS/
 # Timestamped experiment notes and reports
 20*.txt
 20*.md
+
+# Generated analysis reports
+analysis/**/report_summary.md
+analysis_epoch300_side/*_report.md
 
 # Notebooks
 *.ipynb

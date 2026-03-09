@@ -1,10 +1,22 @@
+import argparse
+import datetime
+import gc
+import math
 import os
+import sys
+
+import matplotlib
+import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import pandas as pd
-import math
+import torch
+import yaml
 
-import argparse
+from braindecode import EEGClassifier
+from braindecode.datasets import create_from_mne_raw
+from braindecode.models import ShallowFBCSPNet
+from braindecode.util import set_random_seeds
 from runtime_utils import (
     add_common_runtime_args,
     parse_known_args,
@@ -12,6 +24,13 @@ from runtime_utils import (
     resolve_path,
     resolve_project_root,
 )
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.model_selection import train_test_split
+from sklearn.utils import compute_class_weight
+from skorch.callbacks import LRScheduler
+from skorch.helper import predefined_split
+
+matplotlib.use('Agg')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
@@ -44,39 +63,8 @@ matched_keys = sorted(fusion_keys)
 
 print(f"✅ 找到匹配的 Fusion(EEG + fNIRS) 数据: {matched_keys}")
 print(f"共 {int(len(matched_keys)/2)} 个被试")
-
-
-
 # fusion_pipeline_with_channel_selection.py
-import os
-import sys
-import datetime
-import gc
-
-import numpy as np
-import pandas as pd
-import mne
-
-# matplotlib backend for headless servers
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
-import torch
-from braindecode.datasets import create_from_mne_raw
-from braindecode.models import ShallowFBCSPNet
-from braindecode import EEGClassifier
-from braindecode.util import set_random_seeds
-
-from skorch.callbacks import LRScheduler
-from skorch.helper import predefined_split
-
-from sklearn.model_selection import train_test_split
-from sklearn.utils import compute_class_weight
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-
 # 超参数
-import yaml
 # 读取配置文件
 with open(resolve_path(args.config_path, project_root), "r") as f:
     config = yaml.safe_load(f)
@@ -468,7 +456,7 @@ while top_k >= MIN_TOP_K:
         print("Processing finished. Log saved to", out_fname)
     ## 保存csv
     summary_df = pd.DataFrame(global_results)
-    summary_csv = os.path.join(save_dir, f"summary_{top_k}_results.csv")
+    summary_csv = os.path.join(save_dir, f"{batch_size}_{n_epochs}_summary_{top_k}_results.csv")
     summary_df.to_csv(summary_csv, index=False)
     print("Saved summary CSV:", summary_csv)
     top_k = top_k - TOP_K_STEP

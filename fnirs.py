@@ -1,10 +1,23 @@
+import argparse
+import datetime
+import gc
+import math
 import os
+import sys
+import traceback
+
+import matplotlib
+import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import pandas as pd
-import math
+import torch
+import yaml
 
-import argparse
+from braindecode import EEGClassifier
+from braindecode.datasets import create_from_mne_raw
+from braindecode.models import ShallowFBCSPNet
+from braindecode.util import set_random_seeds
 from runtime_utils import (
     add_common_runtime_args,
     parse_known_args,
@@ -12,6 +25,13 @@ from runtime_utils import (
     resolve_path,
     resolve_project_root,
 )
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.model_selection import train_test_split
+from sklearn.utils import compute_class_weight
+from skorch.callbacks import LRScheduler
+from skorch.helper import predefined_split
+
+matplotlib.use('Agg')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
@@ -20,10 +40,6 @@ parser.add_argument('--data_dir', type=str, default='PPfNIRS')
 parser.add_argument('--device', type=str, default='cuda')
 args = parse_known_args(add_common_runtime_args(parser))
 # 提取fnirs 的fif文件
-
-import os
-import mne
-import numpy as np
 cwd = os.getcwd()
 project_root = resolve_project_root(__file__, args.project_root)
 runtime_dirs = prepare_runtime_dirs(project_root, args.output_root)
@@ -38,38 +54,7 @@ if args.files_limit:
     filesA1 = filesA1[:args.files_limit]
 print(filesA1)
 
-import os
-import sys
-import gc
-import datetime
-import traceback
-
-import numpy as np
-import pandas as pd
-
-# Matplotlib backend for headless servers
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
-import torch
-import mne
-
-from sklearn.utils import compute_class_weight
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-from sklearn.model_selection import train_test_split
-
-from braindecode.datasets import create_from_mne_raw
-from braindecode.models import ShallowFBCSPNet
-from braindecode import EEGClassifier
-from braindecode.util import set_random_seeds
-
-from skorch.callbacks import LRScheduler
-from skorch.helper import predefined_split
-
 # 超参数
-# from config import config
-import yaml
 # 读取配置文件
 with open(resolve_path(args.config_path, project_root), "r") as f:
     config = yaml.safe_load(f)
@@ -487,7 +472,7 @@ while top_k >= MIN_TOP_K:
         print(f"Script finished. Log saved to {out_fname}")
     ## 保存csv
     summary_df = pd.DataFrame(global_results)
-    summary_csv = os.path.join(save_dir, f"summary_{top_k}_results.csv")
+    summary_csv = os.path.join(save_dir, f"{batch_size}_{n_epochs}_summary_{top_k}_results.csv")
     summary_df.to_csv(summary_csv, index=False)
     print("Saved summary CSV:", summary_csv)
     top_k = top_k - TOP_K_STEP

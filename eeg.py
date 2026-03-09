@@ -1,10 +1,21 @@
+import argparse
+import datetime
+import gc
+import math
 import os
+import sys
+
+import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import pandas as pd
-import math
+import torch
+import yaml
 
-import argparse
+from braindecode import EEGClassifier
+from braindecode.datasets import create_from_mne_raw
+from braindecode.models import ShallowFBCSPNet
+from braindecode.util import set_random_seeds
 from runtime_utils import (
     add_common_runtime_args,
     parse_known_args,
@@ -12,6 +23,11 @@ from runtime_utils import (
     resolve_path,
     resolve_project_root,
 )
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, f1_score
+from sklearn.model_selection import train_test_split
+from sklearn.utils import compute_class_weight
+from skorch.callbacks import Callback, LRScheduler
+from skorch.helper import predefined_split
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=32)
@@ -28,12 +44,7 @@ print("当前工作目录是：", cwd)
 print("项目根目录是：", project_root)
 os.chdir(project_root)
 
-
 # 提取fnirs 的fif文件
-
-import os
-import mne
-import numpy as np
 target_path = resolve_path(args.data_dir, project_root)
 filesA1 = [str(target_path / f) for f in os.listdir(target_path) if f.endswith('.fif') and 'A1' in f and not f.startswith('.')]
 filesA1 = sorted(filesA1)
@@ -43,40 +54,12 @@ print(filesA1)
 
 # filesA1 = filesA1[-2:]
 # full_pipeline_channel_selection_then_train.py
-import os
-import sys
-import gc
-import datetime
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-import torch
-
-import mne
-
-from sklearn.utils import compute_class_weight
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, f1_score
-from sklearn.model_selection import train_test_split
-
-from braindecode.datasets import create_from_mne_raw
-from braindecode.models import ShallowFBCSPNet
-from braindecode import EEGClassifier
-from braindecode.util import set_random_seeds
-
-from skorch.callbacks import LRScheduler
-from skorch.helper import predefined_split
-from skorch.callbacks import Callback
 
 
 # 超参数
-from config import config
-import yaml
 # 读取配置文件
 with open(resolve_path(args.config_path, project_root), "r") as f:
     config = yaml.safe_load(f)
-
 # Keep MNE informational chatter out of training logs.
 mne.set_log_level("WARNING")
 
@@ -502,7 +485,7 @@ while top_k >= MIN_TOP_K:
         print(f"Script finished. Log saved to {out_fname}")
     ## 保存csv
     summary_df = pd.DataFrame(global_results)
-    summary_csv = os.path.join(save_dir, f"summary_{top_k}_results.csv")
+    summary_csv = os.path.join(save_dir, f"{batch_size}_{n_epochs}_summary_{top_k}_results.csv")
     summary_df.to_csv(summary_csv, index=False)
     print("Saved summary CSV:", summary_csv)
     top_k = top_k - TOP_K_STEP
