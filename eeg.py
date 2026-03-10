@@ -23,8 +23,8 @@ from runtime_utils import (
     resolve_path,
     resolve_project_root,
 )
-from feature_extract_utilities.eeg_tdpsd import (
-    fisher_score_channels_from_windows_dataset_tdpsd,
+from feature_extract_utilities import (
+    fisher_score_channels_alpha_beta_from_windows_dataset,
 )
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, f1_score
 from sklearn.model_selection import train_test_split
@@ -137,44 +137,6 @@ def resolve_training_device(device_arg):
             )
         return torch.device(requested)
     raise ValueError("Invalid --device. Use one of: auto, cpu, cuda, cuda:N")
-
-
-
-# ------------------ 通道选择（Fisher score） ------------------
-def fisher_score_channels_from_windows_dataset(windows_dataset):
-    """
-    用每个窗口每个通道的 mean(abs(x)) 作为通道特征，按 Fisher score 排序通道。
-    返回 rank_idx（按分数从大到小的通道索引数组）和 scores（每通道分数）。
-    """
-    n_windows = len(windows_dataset)
-    # 获取通道数
-    sample_X, sample_y, _ = windows_dataset[0]
-    n_channels = np.array(sample_X).shape[0]
-    F = np.zeros((n_windows, n_channels))
-    ys = np.zeros((n_windows,), dtype=int)
-    for i in range(n_windows):
-        X_i, y_i, _ = windows_dataset[i]
-        X_i = np.array(X_i)
-        # 特征：mean(abs(.)) over time
-        F[i, :] = np.mean(np.abs(X_i), axis=1)
-        ys[i] = int(y_i)
-    # 计算 Fisher score
-    classes = np.unique(ys)
-    mu_total = F.mean(axis=0)
-    Sb = np.zeros(n_channels)
-    Sw = np.zeros(n_channels)
-    for c in classes:
-        Xc = F[ys == c]
-        nc = Xc.shape[0]
-        if nc == 0:
-            continue
-        muc = Xc.mean(axis=0)
-        varc = Xc.var(axis=0)
-        Sb += nc * (muc - mu_total) ** 2
-        Sw += nc * varc
-    scores = Sb / (Sw + 1e-8)
-    rank_idx = np.argsort(scores)[::-1]
-    return rank_idx, scores
 
 # ------------------ 全局超参数（可按需调整） ------------------
 
@@ -303,18 +265,22 @@ while top_k >= MIN_TOP_K:
                 mapping=mapping,
             )
             print("Created windows_dataset, length:", len(windows_dataset))
-            
 
-            rank_idx, channel_scores, tdpsd_sub_scores = (
-                fisher_score_channels_from_windows_dataset_tdpsd(windows_dataset)
+            sfreq = float(raw.info["sfreq"])
+            rank_idx, channel_scores = (
+                fisher_score_channels_alpha_beta_from_windows_dataset(
+                    windows_dataset,
+                    fs=sfreq,
+                    mode="avg",
+                )
             )
             n_channels_total = np.array(windows_dataset[0][0]).shape[0]
             top_k_use = min(top_k, n_channels_total)
             selected_channels = list(rank_idx[:top_k_use])
             print(f"Total channels: {n_channels_total}, selecting top_k = {top_k_use}")
+            print(f"Channel ranking feature: Welch alpha/beta bandpower Fisher score (fs={sfreq})")
             print("Selected channel indices:", selected_channels)
             print("Selected channel scores:", channel_scores[selected_channels])
-            print("TDPSD sub-score matrix shape:", tdpsd_sub_scores.shape)
 
             # ------------------ 用选定通道构建样本列表 (X_sel, y, meta) ------------------
             all_samples = []
@@ -469,9 +435,7 @@ while top_k >= MIN_TOP_K:
                 'selected_channel_idx': selected_channels,
                 'selected_channel_names': selected_channel_names,
                 'selected_channel_scores': [round(float(channel_scores[idx]), 8) for idx in selected_channels],
-                'selected_channel_tdpsd_sub_scores': [
-                    tdpsd_sub_scores[idx].round(8).tolist() for idx in selected_channels
-                ],
+                'selected_channel_feature_type': 'welch_alpha_beta_fisher_avg',
             }
             global_results.append(result_entry)
 
