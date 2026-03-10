@@ -23,6 +23,9 @@ from runtime_utils import (
     resolve_path,
     resolve_project_root,
 )
+from feature_extract_utilities.eeg_tdpsd import (
+    fisher_score_channels_from_windows_dataset_tdpsd,
+)
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.utils import compute_class_weight
@@ -302,13 +305,16 @@ while top_k >= MIN_TOP_K:
             print("Created windows_dataset, length:", len(windows_dataset))
             
 
-            rank_idx, channel_scores = fisher_score_channels_from_windows_dataset(windows_dataset)
+            rank_idx, channel_scores, tdpsd_sub_scores = (
+                fisher_score_channels_from_windows_dataset_tdpsd(windows_dataset)
+            )
             n_channels_total = np.array(windows_dataset[0][0]).shape[0]
             top_k_use = min(top_k, n_channels_total)
             selected_channels = list(rank_idx[:top_k_use])
             print(f"Total channels: {n_channels_total}, selecting top_k = {top_k_use}")
             print("Selected channel indices:", selected_channels)
             print("Selected channel scores:", channel_scores[selected_channels])
+            print("TDPSD sub-score matrix shape:", tdpsd_sub_scores.shape)
 
             # ------------------ 用选定通道构建样本列表 (X_sel, y, meta) ------------------
             all_samples = []
@@ -462,6 +468,10 @@ while top_k >= MIN_TOP_K:
                 'test_acc': float(test_acc),
                 'selected_channel_idx': selected_channels,
                 'selected_channel_names': selected_channel_names,
+                'selected_channel_scores': [round(float(channel_scores[idx]), 8) for idx in selected_channels],
+                'selected_channel_tdpsd_sub_scores': [
+                    tdpsd_sub_scores[idx].round(8).tolist() for idx in selected_channels
+                ],
             }
             global_results.append(result_entry)
 

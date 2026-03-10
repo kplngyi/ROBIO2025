@@ -420,6 +420,7 @@ while top_k >= MIN_TOP_K:
                     'test_acc': float(test_acc),
                     'selected_channel_idx': selected_channels,
                     'selected_channel_names': selected_channel_names,
+                    'selected_channel_scores': [round(float(channel_scores[idx]), 8) for idx in selected_channels],
                 }
                 global_results.append(result_entry)
                 # ---------- 清理 ----------
